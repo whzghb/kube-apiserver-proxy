@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"ctrl-demo/demo/pkg/api"
 	"github.com/gin-gonic/gin"
+	"github.com/whzghb/kube-apiserver-proxy/pkg/api"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"

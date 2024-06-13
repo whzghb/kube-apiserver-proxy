@@ -1,0 +1,1 @@
+{"spec":{"template":{"spec":{"containers":[{"image":"redis:v4","name":"patch-demo-ctr-2"}]}}}}

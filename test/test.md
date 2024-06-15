@@ -1,4 +1,6 @@
 patch
 ```bash
 curl -v -k -XPATCH  -H "Accept: application/json, */*" -H "Content-Type: application/json" -d @patch.json http://127.0.0.1:8001/apis/apps/v1/namespaces/default/deployments/patch-demo
+curl -v -k -XPOST  -H "Accept: application/json, */*" -H "Content-Type: application/json" -d @login.json http://127.0.0.1:8001/user/login
+curl -X DELETE -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Ik5UZzdmQ0plZTc3SFpLLXJRNkRJeHlMQXkyYzN3S0thSGFnb3hVa1FvWWMifQ.eyJhdWQiOlsiaHR0cHM6Ly9rdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwiXSwiZXhwIjoxNzE4NDMyMTEwLCJpYXQiOjE3MTg0Mjg1MTAsImlzcyI6Imh0dHBzOi8va3ViZXJuZXRlcy5kZWZhdWx0LnN2Yy5jbHVzdGVyLmxvY2FsIiwia3ViZXJuZXRlcy5pbyI6eyJuYW1lc3BhY2UiOiJkZWZhdWx0Iiwic2VydmljZWFjY291bnQiOnsibmFtZSI6ImFkbWluIiwidWlkIjoiM2Q2MjQ1M2MtMzczZi00MmUzLWJiYjUtZWZhYzBkNTllYjkxIn19LCJuYmYiOjE3MTg0Mjg1MTAsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpkZWZhdWx0OmFkbWluIn0.UgkOcuqTRitoovJaJTMW810z4LH9KpzyxCafK4f4MJgu6Ddg7lXmbLZkjimcKdmzWFN8vionjggynQYEdSrcdXcovTzcLovfcrJDyifcCo80YovyGu3bLjokT408giXhzAvMnae85xgaCZrQMWWA9tPMbmXMCGMwRLAXl6SdKVKyxR8wqH58RZqhR85sdYlKKHKxqD0r2yOXWn9Jrrf7ouOHNGOYlOvJMkpOHe_umJA8N9jUwG01yj2D-1w9pF-Xr1hyTMzXZkVNHGZn8MeMqgpwFBhIph7gSSHOX3NfZTk5LyPPyM1Y9Qd0_bRHqzbMYw03f-rINTPxu7QbUTCrYA" http://127.0.0.1:8001/user/logout/admin
 ```

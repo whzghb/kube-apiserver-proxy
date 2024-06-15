@@ -4,6 +4,8 @@ import (
 	"context"
 	"github.com/gin-gonic/gin"
 	"github.com/whzghb/kube-apiserver-proxy/pkg/api"
+	"github.com/whzghb/kube-apiserver-proxy/pkg/middlerware"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -28,12 +30,39 @@ func main() {
 	})
 	succeedOrDie(err)
 
+	for _, obj := range []client.Object{&rbacv1.RoleBinding{}, &rbacv1.ClusterRoleBinding{}} {
+		succeedOrDie(mgr.GetFieldIndexer().IndexField(context.Background(), obj, ".subjects[*].name", func(rawObj client.Object) []string {
+			names := make([]string, 0, 10)
+			switch obj.(type) {
+			case *rbacv1.RoleBinding:
+				rb := rawObj.(*rbacv1.RoleBinding)
+				for _, sub := range rb.Subjects {
+					names = append(names, sub.Name)
+				}
+			case *rbacv1.ClusterRoleBinding:
+				rb := rawObj.(*rbacv1.ClusterRoleBinding)
+				for _, sub := range rb.Subjects {
+					names = append(names, sub.Name)
+				}
+			}
+			return names
+		}))
+	}
+
 	go func() {
 		succeedOrDie(mgr.Start(context.Background()))
 	}()
 
 	r := gin.Default()
+	r.Use(middlerware.Auth(mgr))
+
 	a := api.NewApi(mgr)
+
+	user := r.Group("/user")
+	{
+		user.POST("/login", a.Login)
+		user.DELETE("/logout/:name", a.Logout)
+	}
 
 	apis := r.Group("/apis")
 	{
@@ -50,6 +79,7 @@ func main() {
 		apis.DELETE("/:group/:version/:resource/:name", a.DeleteObject)
 		apis.DELETE("/:group/:version/namespaces/:namespace/:resource/:name", a.DeleteObject)
 	}
+
 	core := r.Group("/api")
 	{
 		core.GET("/:version/:resource", a.GetObjectList)

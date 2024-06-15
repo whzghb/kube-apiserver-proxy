@@ -5,8 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	http_common "github.com/whzghb/kube-apiserver-proxy/pkg/http-common"
 	"io"
+	authv1 "k8s.io/api/authentication/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	runtimeschema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -18,12 +22,90 @@ import (
 	"strings"
 )
 
+// TODO database
+const (
+	UserName         = "admin"
+	Password         = "password"
+	DefaultNamespace = "default"
+)
+
 type Api struct {
 	mgr ctrl.Manager
 }
 
 func NewApi(mgr ctrl.Manager) *Api {
 	return &Api{mgr: mgr}
+}
+
+func (a *Api) Login(c *gin.Context) {
+	user := &http_common.UserLoginRequest{}
+	err := c.ShouldBind(user)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "bad request", "detail": err.Error()})
+		return
+	}
+	if user.Name != UserName || user.Password != Password {
+		c.JSON(http.StatusForbidden, gin.H{"msg": "invalid username or password"})
+		return
+	}
+
+	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: DefaultNamespace, Name: user.Name}}
+	err = a.mgr.GetClient().Get(c.Request.Context(), types.NamespacedName{Name: user.Name, Namespace: DefaultNamespace}, sa)
+	if err == nil {
+		err = a.mgr.GetClient().Delete(c.Request.Context(), sa)
+		if err != nil {
+			fmt.Printf("delete serviceaccount error: %s\n", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
+		}
+		sa.ResourceVersion = ""
+	}
+	err = a.mgr.GetClient().Create(c.Request.Context(), sa)
+	if err != nil {
+		//TODO log
+		fmt.Printf("create serviceaccount error: %s\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
+		return
+	}
+
+	expireTime := int64(3600)
+	token := &authv1.TokenRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: user.Name,
+		},
+		Spec: authv1.TokenRequestSpec{
+			ExpirationSeconds: &expireTime,
+		},
+	}
+	err = a.mgr.GetClient().SubResource("token").Create(c.Request.Context(), sa, token)
+	if err != nil {
+		fmt.Printf("create token error: %s\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
+		return
+	}
+	resp := &http_common.UserLoginResponse{Token: token.Status.Token}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (a *Api) Logout(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "bad request", "detail": "name can be set"})
+		return
+	}
+	sa := &corev1.ServiceAccount{}
+	err := a.mgr.GetClient().Get(c.Request.Context(), types.NamespacedName{Namespace: DefaultNamespace, Name: name}, sa)
+	if err != nil {
+		fmt.Printf("get serviceaccount error: %s\n", err)
+		c.JSON(http.StatusNotFound, gin.H{"msg": "not found"})
+		return
+	}
+	err = a.mgr.GetClient().Delete(c.Request.Context(), sa)
+	if err != nil {
+		fmt.Printf("delete serviceaccount error: %s\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"msg": "success"})
 }
 
 func (a *Api) GetObjectList(c *gin.Context) {

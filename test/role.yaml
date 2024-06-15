@@ -1,0 +1,123 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: pod-reader
+rules:
+- apiGroups: [""] # "" 标明 core API 组
+  resources: ["pods", "nodes"]
+  verbs: ["watch", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+# 此角色绑定允许 "jane" 读取 "default" 名字空间中的 Pod
+# 你需要在该名字空间中有一个名为 “pod-reader” 的 Role
+kind: RoleBinding
+metadata:
+  name: read-pods
+  namespace: default
+subjects:
+  # 你可以指定不止一个“subject（主体）”
+  - kind: ServiceAccount
+    name: admin
+    namespace: default
+  - kind: ServiceAccount
+    name: test1
+    namespace: default
+roleRef:
+  # "roleRef" 指定与某 Role 或 ClusterRole 的绑定关系
+  kind: Role        # 此字段必须是 Role 或 ClusterRole
+  name: pod-reader  # 此字段必须与你要绑定的 Role 或 ClusterRole 的名称匹配
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+# 此角色绑定允许 "jane" 读取 "default" 名字空间中的 Pod
+# 你需要在该名字空间中有一个名为 “pod-reader” 的 Role
+kind: RoleBinding
+metadata:
+  name: read-pods2
+  namespace: default
+subjects:
+  # 你可以指定不止一个“subject（主体）”
+  - kind: ServiceAccount
+    name: admin
+    namespace: default
+roleRef:
+  # "roleRef" 指定与某 Role 或 ClusterRole 的绑定关系
+  kind: ClusterRole        # 此字段必须是 Role 或 ClusterRole
+  name: admin  # 此字段必须与你要绑定的 Role 或 ClusterRole 的名称匹配
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+# 此角色绑定允许 "jane" 读取 "default" 名字空间中的 Pod
+# 你需要在该名字空间中有一个名为 “pod-reader” 的 Role
+kind: RoleBinding
+metadata:
+  name: read-pods3
+  namespace: default
+subjects:
+  # 你可以指定不止一个“subject（主体）”
+  - kind: ServiceAccount
+    name: test1
+    namespace: default
+roleRef:
+  # "roleRef" 指定与某 Role 或 ClusterRole 的绑定关系
+  kind: Role        # 此字段必须是 Role 或 ClusterRole
+  name: pod-reader  # 此字段必须与你要绑定的 Role 或 ClusterRole 的名称匹配
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+# 此角色绑定允许 "jane" 读取 "default" 名字空间中的 Pod
+# 你需要在该名字空间中有一个名为 “pod-reader” 的 Role
+kind: ClusterRoleBinding
+metadata:
+  name: read-pods4
+subjects:
+  # 你可以指定不止一个“subject（主体）”
+  - kind: ServiceAccount
+    name: test1
+    namespace: default
+roleRef:
+  # "roleRef" 指定与某 Role 或 ClusterRole 的绑定关系
+  kind: ClusterRole        # 此字段必须是 Role 或 ClusterRole
+  name: admin  # 此字段必须与你要绑定的 Role 或 ClusterRole 的名称匹配
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+# 此角色绑定允许 "jane" 读取 "default" 名字空间中的 Pod
+# 你需要在该名字空间中有一个名为 “pod-reader” 的 Role
+kind: ClusterRoleBinding
+metadata:
+  name: read-pods5
+subjects:
+  # 你可以指定不止一个“subject（主体）”
+  - kind: ServiceAccount
+    name: admin
+    namespace: default
+roleRef:
+  # "roleRef" 指定与某 Role 或 ClusterRole 的绑定关系
+  kind: ClusterRole        # 此字段必须是 Role 或 ClusterRole
+  name: admin  # 此字段必须与你要绑定的 Role 或 ClusterRole 的名称匹配
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+# 此角色绑定允许 "jane" 读取 "default" 名字空间中的 Pod
+# 你需要在该名字空间中有一个名为 “pod-reader” 的 Role
+kind: ClusterRoleBinding
+metadata:
+  name: read-pods6
+subjects:
+  # 你可以指定不止一个“subject（主体）”
+  - kind: ServiceAccount
+    name: admin
+    namespace: default
+roleRef:
+  # "roleRef" 指定与某 Role 或 ClusterRole 的绑定关系
+  kind: ClusterRole        # 此字段必须是 Role 或 ClusterRole
+  name: view  # 此字段必须与你要绑定的 Role 或 ClusterRole 的名称匹配
+  apiGroup: rbac.authorization.k8s.io

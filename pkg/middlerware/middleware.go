@@ -22,6 +22,7 @@ var methodVerbMap = map[string]string{
 	"PUT":    "update",
 	"PATCH":  "patch",
 	"DELETE": "delete",
+	"Watch":  "watch",
 }
 
 func Auth(mgr ctrl.Manager) gin.HandlerFunc {
@@ -151,6 +152,9 @@ func Auth(mgr ctrl.Manager) gin.HandlerFunc {
 				if resourceName == "" && c.Request.Method == "GET" {
 					method = "LIST"
 				}
+				if watch := c.Query("watch"); watch == "true" {
+					method = "Watch"
+				}
 				if verb != methodVerbMap[method] && verb != "*" {
 					continue
 				}
@@ -171,6 +175,21 @@ func Auth(mgr ctrl.Manager) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusForbidden, gin.H{"msg": "403 forbidden"})
 		c.Abort()
+	}
+}
+
+func HeadersMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		watch := c.Query("watch")
+		if watch == "" {
+			c.Next()
+			return
+		}
+		c.Writer.Header().Set("Content-Type", "text/event-stream")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Next()
 	}
 }
 

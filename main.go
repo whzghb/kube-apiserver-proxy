@@ -55,6 +55,7 @@ func main() {
 
 	r := gin.Default()
 	r.Use(middlerware.Auth(mgr))
+	r.Use(middlerware.HeadersMiddleware())
 
 	a := api.NewApi(mgr)
 

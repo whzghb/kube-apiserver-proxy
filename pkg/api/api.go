@@ -114,6 +114,12 @@ func (a *Api) GetObjectList(c *gin.Context) {
 		a.errorParseHandler(c, err)
 		return
 	}
+	watch := c.Query("watch")
+	if watch == "true" {
+		a.WatchList(c)
+		return
+	}
+
 	namespace := a.parseNamespace(c)
 	listOptions, err := a.parseListOptions(c)
 	if err != nil {
@@ -137,6 +143,11 @@ func (a *Api) GetObject(c *gin.Context) {
 	obj, err := a.getUnstructuredObj(c)
 	if err != nil {
 		a.errorParseHandler(c, err)
+		return
+	}
+	watch := c.Query("watch")
+	if watch == "true" {
+		a.WatchGet(c)
 		return
 	}
 
@@ -230,6 +241,74 @@ func (a *Api) PatchObject(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"msg": fmt.Sprintf("%s/%s patched", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())})
+}
+
+func (a *Api) WatchGet(c *gin.Context) {
+	obj, _ := a.getUnstructuredObj(c)
+	informer, err := a.mgr.GetCache().GetInformerForKind(c.Request.Context(), obj.GetObjectKind().GroupVersionKind())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
+		return
+	}
+
+	e := &EventHandler{FirstTime: true, Sig: make(chan struct{})}
+	_, err = informer.AddEventHandler(e)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
+		return
+	}
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case <-e.Sig:
+			err = a.mgr.GetClient().Get(context.Background(), a.getNamespacedName(c), obj)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					c.SSEvent("message", nil)
+					return true
+				}
+				return false
+			}
+			e.Namespace = obj.GetNamespace()
+			e.Name = obj.GetName()
+			c.SSEvent("message", obj)
+		}
+		return true
+	})
+}
+
+func (a *Api) WatchList(c *gin.Context) {
+	objList, _ := a.getUnstructuredObjList(c)
+	namespace := a.parseNamespace(c)
+	listOptions, err := a.parseListOptions(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
+		return
+	}
+
+	informer, err := a.mgr.GetCache().GetInformerForKind(c.Request.Context(), objList.GetObjectKind().GroupVersionKind())
+	e := &EventHandler{FirstTime: true, Sig: make(chan struct{}), Namespace: namespace}
+	_, err = informer.AddEventHandler(e)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
+		return
+	}
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case <-e.Sig:
+			if namespace != "" {
+				err = a.mgr.GetClient().List(context.Background(), objList, client.InNamespace(namespace), listOptions)
+			} else {
+				err = a.mgr.GetClient().List(context.Background(), objList, listOptions)
+			}
+			if err != nil {
+				return false
+			}
+			c.SSEvent("message", objList)
+		}
+		return true
+	})
 }
 
 func (a *Api) parseGVR(c *gin.Context) (runtimeschema.GroupVersionKind, error) {

@@ -15,11 +15,15 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	runtimeschema "k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	toolscache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/retry"
 	"net/http"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // TODO database
@@ -252,11 +256,14 @@ func (a *Api) WatchGet(c *gin.Context) {
 	}
 
 	e := &EventHandler{FirstTime: true, Sig: make(chan struct{})}
-	_, err = informer.AddEventHandler(e)
+	registration, err := informer.AddEventHandler(e)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
 		return
 	}
+	defer func() {
+		a.removeEventHandler(informer, registration)
+	}()
 
 	c.Stream(func(w io.Writer) bool {
 		select {
@@ -272,6 +279,8 @@ func (a *Api) WatchGet(c *gin.Context) {
 			e.Namespace = obj.GetNamespace()
 			e.Name = obj.GetName()
 			c.SSEvent("message", obj)
+		default:
+			time.Sleep(1 * time.Second)
 		}
 		return true
 	})
@@ -288,11 +297,14 @@ func (a *Api) WatchList(c *gin.Context) {
 
 	informer, err := a.mgr.GetCache().GetInformerForKind(c.Request.Context(), objList.GetObjectKind().GroupVersionKind())
 	e := &EventHandler{FirstTime: true, Sig: make(chan struct{}), Namespace: namespace}
-	_, err = informer.AddEventHandler(e)
+	registration, err := informer.AddEventHandler(e)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
 		return
 	}
+	defer func() {
+		a.removeEventHandler(informer, registration)
+	}()
 
 	c.Stream(func(w io.Writer) bool {
 		select {
@@ -306,6 +318,8 @@ func (a *Api) WatchList(c *gin.Context) {
 				return false
 			}
 			c.SSEvent("message", objList)
+		default:
+			time.Sleep(1 * time.Second)
 		}
 		return true
 	})
@@ -401,6 +415,21 @@ func (a *Api) parseListOptions(c *gin.Context) (*client.ListOptions, error) {
 	// TODO filedSelector
 
 	return &client.ListOptions{Limit: int64(limitNum), LabelSelector: labels.SelectorFromValidatedSet(selectors)}, nil
+}
+
+func (a *Api) removeEventHandler(informer cache.Informer, handler toolscache.ResourceEventHandlerRegistration) {
+	for {
+		err := retry.OnError(retry.DefaultRetry, func(err error) bool {
+			return err != nil
+		}, func() error {
+			return informer.RemoveEventHandler(handler)
+		})
+		if err == nil {
+			fmt.Println("eventHandler removed")
+			return
+		}
+		fmt.Printf("remove eventHandler error: %s\n", err)
+	}
 }
 
 func (a *Api) errorResponseHandler(c *gin.Context, err error) {

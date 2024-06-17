@@ -33,7 +33,7 @@ func main() {
 	for _, obj := range []client.Object{&rbacv1.RoleBinding{}, &rbacv1.ClusterRoleBinding{}} {
 		succeedOrDie(mgr.GetFieldIndexer().IndexField(context.Background(), obj, ".subjects[*].name", func(rawObj client.Object) []string {
 			names := make([]string, 0, 10)
-			switch obj.(type) {
+			switch rawObj.(type) {
 			case *rbacv1.RoleBinding:
 				rb := rawObj.(*rbacv1.RoleBinding)
 				for _, sub := range rb.Subjects {

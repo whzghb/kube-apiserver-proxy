@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/whzghb/kube-apiserver-proxy/pkg/auth"
 	http_common "github.com/whzghb/kube-apiserver-proxy/pkg/http-common"
 	"io"
 	authv1 "k8s.io/api/authentication/v1"
@@ -87,6 +88,8 @@ func (a *Api) Login(c *gin.Context) {
 		return
 	}
 	resp := &http_common.UserLoginResponse{Token: token.Status.Token}
+	auth.Cache.Store(token.Status.Token[:32], &auth.UserInfo{Name: user.Name, Namespace: DefaultNamespace, RenewTime: time.Now()})
+
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -109,6 +112,9 @@ func (a *Api) Logout(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
 		return
 	}
+
+	auth.Cache.Delete(strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")[:32])
+
 	c.JSON(http.StatusOK, gin.H{"msg": "success"})
 }
 

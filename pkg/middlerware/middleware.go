@@ -2,7 +2,9 @@ package middlerware
 
 import (
 	"context"
+	"errors"
 	"github.com/gin-gonic/gin"
+	"github.com/whzghb/kube-apiserver-proxy/pkg/auth"
 	authv1 "k8s.io/api/authentication/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -13,6 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
+	"time"
 )
 
 var methodVerbMap = map[string]string{
@@ -40,29 +43,31 @@ func Auth(mgr ctrl.Manager) gin.HandlerFunc {
 			return
 		}
 
-		tr := &authv1.TokenReview{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "tokenreview",
-			},
-			Spec: authv1.TokenReviewSpec{
-				Token: strings.TrimPrefix(token, "Bearer "),
-			},
+		var name, namespace string
+		var valid bool
+		authToken := strings.TrimPrefix(token, "Bearer ")
+
+		if cache, ok := auth.Cache.Load(authToken[:32]); ok {
+			user := cache.(*auth.UserInfo)
+			name, namespace = user.Name, user.Namespace
+			if user.RenewTime.Add(5 * time.Second).After(time.Now()) {
+				valid = true
+			}
 		}
 
-		err := mgr.GetClient().Create(context.Background(), tr)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"msg": "server error"})
-			c.Abort()
-			return
+		if !valid {
+			userName, code, err := authenticate(mgr, authToken)
+			if err != nil {
+				c.JSON(code, gin.H{"msg": err.Error()})
+				c.Abort()
+				return
+			}
+			user := strings.Split(userName, ":")
+			name, namespace = user[3], user[2]
+			auth.Cache.Store(authToken[:32], &auth.UserInfo{Namespace: namespace, Name: name, RenewTime: time.Now()})
 		}
 
-		if !tr.Status.Authenticated {
-			c.JSON(http.StatusForbidden, gin.H{"msg": "403 forbidden"})
-			c.Abort()
-			return
-		}
-
-		if c.Request.URL.String() == "/user/logout" {
+		if strings.HasPrefix(c.Request.URL.String(), "/user/logout") {
 			c.Next()
 			return
 		}
@@ -71,11 +76,8 @@ func Auth(mgr ctrl.Manager) gin.HandlerFunc {
 		roleBindingList := &rbacv1.RoleBindingList{}
 		clusterRoleBindingList := &rbacv1.ClusterRoleBindingList{}
 
-		userInfo := strings.Split(tr.Status.User.Username, ":")
-		name, namespace := userInfo[3], userInfo[2]
 		fieldSelector := fields.OneTermEqualSelector(".subjects[*].name", name)
-
-		err = mgr.GetClient().List(c.Request.Context(), roleBindingList, &client.ListOptions{
+		err := mgr.GetClient().List(c.Request.Context(), roleBindingList, &client.ListOptions{
 			FieldSelector: fieldSelector,
 			Namespace:     namespace,
 		})
@@ -118,6 +120,7 @@ func Auth(mgr ctrl.Manager) gin.HandlerFunc {
 			}
 			rules = append(rules, clusterRole.Rules...)
 		}
+
 		for _, clusterRoleBinding := range clusterRoleBindingList.Items {
 			clusterRole := &rbacv1.ClusterRole{}
 			err = mgr.GetClient().Get(c.Request.Context(), types.NamespacedName{Name: clusterRoleBinding.RoleRef.Name}, clusterRole)
@@ -209,4 +212,26 @@ func parseGVR(c *gin.Context) GVR {
 
 func parseName(c *gin.Context) string {
 	return c.Param("name")
+}
+
+func authenticate(mgr ctrl.Manager, authToken string) (string, int, error) {
+	tr := &authv1.TokenReview{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tokenreview",
+		},
+		Spec: authv1.TokenReviewSpec{
+			Token: authToken,
+		},
+	}
+
+	err := mgr.GetClient().Create(context.Background(), tr)
+	if err != nil {
+		return "", http.StatusInternalServerError, errors.New("server error")
+	}
+
+	if !tr.Status.Authenticated {
+		return "", http.StatusForbidden, errors.New("403 forbidden")
+	}
+
+	return tr.Status.User.Username, 0, nil
 }

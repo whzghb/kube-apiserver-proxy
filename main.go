@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -22,10 +21,13 @@ func init() {
 
 func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		NewClient: func(config *rest.Config, options client.Options) (client.Client, error) {
-			return client.New(config, client.Options{
-				Cache: &client.CacheOptions{Unstructured: true, Reader: options.Cache.Reader},
-			})
+		//NewClient: func(config *rest.Config, options client.Options) (client.Client, error) {
+		//	return client.New(config, client.Options{
+		//		Cache: &client.CacheOptions{Unstructured: true, Reader: options.Cache.Reader},
+		//	})
+		//},
+		Client: client.Options{
+			Cache: &client.CacheOptions{Unstructured: true},
 		},
 	})
 	succeedOrDie(err)
